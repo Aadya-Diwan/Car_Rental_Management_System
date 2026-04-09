@@ -6,9 +6,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// =======================
+// ======================
 // DB CONNECTION
-// =======================
+// ======================
 const db = mysql.createConnection({
     host: "localhost",
     user: "root",
@@ -21,50 +21,67 @@ db.connect(err => {
         console.error("❌ DB Connection Failed:", err);
         return;
     }
-    console.log("✅ Connected to MySQL");
+    console.log("✅ MySQL Connected");
 });
 
 
-// =======================
+// ======================
 // CREATE CUSTOMER
-// =======================
+// ======================
 app.post("/customers", (req, res) => {
     const { name, email, phone, license_number } = req.body;
+
+    console.log("📥 Incoming:", req.body);
 
     if (!name || !email || !phone || !license_number) {
         return res.status(400).json({ error: "All fields required ❌" });
     }
 
-    const query = `
+    const sql = `
         INSERT INTO Customers (name, email, phone, license_number)
         VALUES (?, ?, ?, ?)
     `;
 
-    db.query(query, [name, email, phone, license_number], (err, result) => {
-        if (err) return res.status(500).send(err);
-        res.json({ customer_id: result.insertId });
+    db.query(sql, [name, email, phone, license_number], (err, result) => {
+
+        if (err) {
+            console.error("❌ DB ERROR:", err);
+            return res.status(500).json({ error: "Database error ❌" });
+        }
+
+        console.log("✅ Insert Result:", result);
+
+        res.json({
+            success: true,
+            customer_id: result.insertId
+        });
     });
 });
 
 
-// =======================
+// ======================
 // GET AVAILABLE CARS
-// =======================
+// ======================
 app.get("/cars", (req, res) => {
-    const query = "SELECT * FROM Cars WHERE status='available'";
+    const sql = "SELECT * FROM Cars WHERE status='available'";
 
-    db.query(query, (err, result) => {
-        if (err) return res.status(500).send(err);
+    db.query(sql, (err, result) => {
+        if (err) {
+            console.error("❌ Cars Fetch Error:", err);
+            return res.status(500).send(err);
+        }
         res.json(result);
     });
 });
 
 
-// =======================
-// BOOK CAR (MAIN LOGIC)
-// =======================
+// ======================
+// BOOK CAR (RENTAL + PAYMENT)
+// ======================
 app.post("/rentals", (req, res) => {
     const { customer_id, car_id, start_date, end_date } = req.body;
+
+    console.log("📥 Booking Request:", req.body);
 
     if (!customer_id || !car_id || !start_date || !end_date) {
         return res.status(400).send("Missing fields ❌");
@@ -76,53 +93,57 @@ app.post("/rentals", (req, res) => {
     const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
 
     if (days <= 0) {
-        return res.status(400).send("Invalid date range ❌");
+        return res.status(400).send("Invalid dates ❌");
     }
 
-    // STEP 1: CHECK CAR + GET PRICE
+    // GET PRICE
     db.query(
         "SELECT price_per_day FROM Cars WHERE car_id=? AND status='available'",
         [car_id],
         (err, result) => {
 
-            if (err) return res.status(500).send(err);
+            if (err) {
+                console.error("❌ Price Fetch Error:", err);
+                return res.status(500).send(err);
+            }
 
             if (result.length === 0) {
-                return res.status(400).send("Car not available ❌");
+                return res.send("Car not available ❌");
             }
 
             const price = result[0].price_per_day;
             const total = price * days;
 
-            // STEP 2: INSERT RENTAL
-            const rentalQuery = `
-                INSERT INTO Rentals 
-                (customer_id, car_id, start_date, end_date, total_amount, status)
-                VALUES (?, ?, ?, ?, ?, 'ongoing')
-            `;
+            console.log("💰 Total:", total);
 
+            // INSERT RENTAL
             db.query(
-                rentalQuery,
+                `INSERT INTO Rentals 
+                (customer_id, car_id, start_date, end_date, total_amount, status)
+                VALUES (?, ?, ?, ?, ?, 'ongoing')`,
                 [customer_id, car_id, start_date, end_date, total],
                 (err, rentalResult) => {
 
-                    if (err) return res.status(500).send(err);
+                    if (err) {
+                        console.error("❌ Rental Error:", err);
+                        return res.status(500).send(err);
+                    }
 
                     const rentalId = rentalResult.insertId;
 
-                    // STEP 3: UPDATE CAR STATUS
+                    // UPDATE CAR STATUS
                     db.query(
                         "UPDATE Cars SET status='rented' WHERE car_id=?",
                         [car_id]
                     );
 
-                    // STEP 4: INSERT PAYMENT
+                    // INSERT PAYMENT
                     db.query(
                         "INSERT INTO Payments (rental_id, amount, status) VALUES (?, ?, 'paid')",
                         [rentalId, total]
                     );
 
-                    res.send(`✅ Booking Successful! Total: ₹${total}`);
+                    res.send(`Car booked successfully 🚗 Total: ₹${total}`);
                 }
             );
         }
@@ -130,9 +151,9 @@ app.post("/rentals", (req, res) => {
 });
 
 
-// =======================
-// RETURN CAR (OPTIONAL)
-// =======================
+// ======================
+// RETURN CAR
+// ======================
 app.put("/return/:id", (req, res) => {
     const rentalId = req.params.id;
 
@@ -142,10 +163,7 @@ app.put("/return/:id", (req, res) => {
         (err, result) => {
 
             if (err) return res.status(500).send(err);
-
-            if (result.length === 0) {
-                return res.send("Rental not found ❌");
-            }
+            if (result.length === 0) return res.send("Rental not found ❌");
 
             const carId = result[0].car_id;
 
@@ -161,15 +179,15 @@ app.put("/return/:id", (req, res) => {
                 [carId]
             );
 
-            res.send("🚗 Car returned successfully");
+            res.send("Car returned successfully ✅");
         }
     );
 });
 
 
-// =======================
-// START SERVER
-// =======================
+// ======================
+// SERVER START
+// ======================
 app.listen(5000, () => {
     console.log("🚀 Server running on http://localhost:5000");
 });
