@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Car Rental System</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: 'Segoe UI';
+    background: #f4f6fb;
+}
+
+/* NAVBAR */
+.navbar {
+    background: #0f172a;
+    color: white;
+    padding: 15px 30px;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+/* LAYOUT */
+.container {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 20px;
+    padding: 20px;
+}
+
+/* LEFT PANEL */
+.sidebar {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* RIGHT PANEL */
+.main {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* CAR GRID */
+.cars {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 15px;
+}
+
+/* CARD */
+.card {
+    background: white;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+}
+
+.car {
+    border: 2px solid transparent;
+    transition: 0.3s;
+}
+
+.car:hover {
+    transform: translateY(-5px);
+}
+
+.selected {
+    border: 2px solid #2563eb;
+    background: #eff6ff;
+}
+
+/* INPUTS */
+input {
+    width: 100%;
+    padding: 10px;
+    margin: 8px 0;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+
+/* BUTTON */
+button {
+    width: 100%;
+    padding: 10px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #1d4ed8;
+}
+
+/* DISABLED */
+button:disabled {
+    background: gray;
+    cursor: not-allowed;
+}
+
+/* TEXT */
+.price {
+    color: green;
+    font-weight: bold;
+}
+
+.msg {
+    margin-top: 10px;
+    font-weight: bold;
+}
+</style>
+</head>
+
+<body>
+
+<div class="navbar">🚗 Car Rental Management System</div>
+
+<div class="container">
+
+    <!-- LEFT SIDE -->
+    <div class="sidebar">
+
+        <h3>Customer Details</h3>
+
+        <input id="name" placeholder="Full Name">
+        <input id="email" placeholder="Email">
+        <input id="phone" placeholder="Phone">
+        <input id="license" placeholder="License Number">
+
+        <button onclick="createCustomer()">Continue</button>
+        <p id="customerMsg" class="msg"></p>
+
+        <hr>
+
+        <h3>Booking</h3>
+
+        <div style="background:#e0ecff;padding:10px;border-radius:8px;margin-bottom:10px;">
+            <b>Selected Car ID:</b> <span id="selectedCar">None</span>
+        </div>
+
+        <input type="date" id="start">
+        <input type="date" id="end">
+
+        <button onclick="calculatePrice()">Calculate Price</button>
+        <p id="price" class="msg"></p>
+
+        <button onclick="book()" id="bookBtn" disabled>
+            🚗 Book Now
+        </button>
+
+        <p id="bookingMsg" class="msg"></p>
+
+    </div>
+
+    <!-- RIGHT SIDE -->
+    <div class="main">
+
+        <div class="card">
+            <h2>Available Cars (Click "Select This Car")</h2>
+        </div>
+
+        <div class="cars" id="cars"></div>
+
+    </div>
+
+</div>
+
+<script>
+
+let currentCustomerId = null;
+let selectedCarId = null;
+let selectedPrice = 0;
+
+// AUTO LOAD CARS
+window.onload = loadCars;
+
+// CREATE CUSTOMER
+function createCustomer() {
+    const nameInput = document.getElementById("name").value;
+    const emailInput = document.getElementById("email").value;
+    const phoneInput = document.getElementById("phone").value;
+    const licenseInput = document.getElementById("license").value;
+
+    if (!nameInput || !emailInput || !phoneInput || !licenseInput) {
+        document.getElementById("customerMsg").innerText = "Fill all fields ❌";
+        return;
+    }
+
+    fetch("http://localhost:5000/customers", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            name: nameInput,
+            email: emailInput,
+            phone: phoneInput,
+            license_number: licenseInput
+        })
+    })
+    .then(res => res.json())
+    .then(res => {
+        currentCustomerId = res.customer_id;
+        document.getElementById("customerMsg").innerText = "Customer created ✅ Now book car";
+    })
+    .catch(() => {
+        document.getElementById("customerMsg").innerText = "Error creating customer ❌";
+    });
+}
+
+// LOAD CARS
+function loadCars() {
+    fetch("http://localhost:5000/cars")
+    .then(res => res.json())
+    .then(data => {
+        cars.innerHTML = "";
+
+        data.forEach(car => {
+            cars.innerHTML += `
+                <div class="card car" id="car-${car.car_id}">
+                    <h3>${car.brand} ${car.model}</h3>
+                    <p>ID: ${car.car_id}</p>
+                    <p class="price">₹${car.price_per_day}/day</p>
+                    <button onclick="selectCar(${car.car_id}, ${car.price_per_day})">
+                        🚗 Select This Car
+                    </button>
+                </div>
+            `;
+        });
+    });
+}
+
+// SELECT CAR
+function selectCar(id, price) {
+    selectedCarId = id;
+    selectedPrice = price;
+
+    selectedCar.innerText = id;
+
+    document.querySelectorAll(".car").forEach(c => c.classList.remove("selected"));
+    document.getElementById("car-" + id).classList.add("selected");
+
+    bookBtn.disabled = false;
+
+    price.innerText = "Car selected ✅ Now choose dates";
+}
+
+// CALCULATE PRICE
+function calculatePrice() {
+    if (!selectedCarId) {
+        price.innerText = "Select a car first ❌";
+        return;
+    }
+
+    const s = new Date(start.value);
+    const e = new Date(end.value);
+
+    const days = (e - s) / (1000 * 60 * 60 * 24);
+
+    if (days <= 0) {
+        price.innerText = "Invalid dates ❌";
+        return;
+    }
+
+    const total = days * selectedPrice;
+    price.innerText = `Total: ₹${total} (${days} days)`;
+}
+
+// BOOK CAR
+function book() {
+    if (!currentCustomerId) {
+        bookingMsg.innerText = "Enter customer details first ❌";
+        return;
+    }
+
+    if (!start.value || !end.value) {
+        bookingMsg.innerText = "Select dates ❌";
+        return;
+    }
+
+    fetch("http://localhost:5000/rentals", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            customer_id: currentCustomerId,
+            car_id: selectedCarId,
+            start_date: start.value,
+            end_date: end.value
+        })
+    })
+    .then(res => res.text())
+    .then(msg => {
+        bookingMsg.innerText = msg;
+        loadCars();
+        bookBtn.disabled = true;
+        selectedCar.innerText = "None";
+    });
+}
+
+</script>
+
+</body>
+</html>
