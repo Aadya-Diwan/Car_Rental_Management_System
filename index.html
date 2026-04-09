@@ -9,19 +9,18 @@
 body {
     margin: 0;
     font-family: 'Segoe UI';
-    background: #f4f6fb;
+    background: #f1f5f9;
 }
 
-/* NAVBAR */
 .navbar {
     background: #0f172a;
     color: white;
-    padding: 15px 30px;
-    font-size: 20px;
+    padding: 15px;
+    text-align: center;
+    font-size: 22px;
     font-weight: bold;
 }
 
-/* LAYOUT */
 .container {
     display: grid;
     grid-template-columns: 1fr 2fr;
@@ -29,60 +28,43 @@ body {
     padding: 20px;
 }
 
-/* LEFT PANEL */
 .sidebar {
     background: white;
     padding: 20px;
     border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-/* RIGHT PANEL */
 .main {
     display: flex;
     flex-direction: column;
     gap: 20px;
 }
 
-/* CAR GRID */
 .cars {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
     gap: 15px;
 }
 
-/* CARD */
 .card {
     background: white;
     padding: 15px;
     border-radius: 12px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
 }
 
-.car {
-    border: 2px solid transparent;
-    transition: 0.3s;
-}
-
-.car:hover {
-    transform: translateY(-5px);
-}
-
-.selected {
+.car.selected {
     border: 2px solid #2563eb;
-    background: #eff6ff;
 }
 
-/* INPUTS */
 input {
     width: 100%;
     padding: 10px;
-    margin: 8px 0;
+    margin: 6px 0;
     border-radius: 6px;
     border: 1px solid #ccc;
 }
 
-/* BUTTON */
 button {
     width: 100%;
     padding: 10px;
@@ -97,21 +79,9 @@ button:hover {
     background: #1d4ed8;
 }
 
-/* DISABLED */
-button:disabled {
-    background: gray;
-    cursor: not-allowed;
-}
-
-/* TEXT */
-.price {
-    color: green;
-    font-weight: bold;
-}
-
 .msg {
-    margin-top: 10px;
     font-weight: bold;
+    margin-top: 8px;
 }
 </style>
 </head>
@@ -122,71 +92,84 @@ button:disabled {
 
 <div class="container">
 
-    <!-- LEFT SIDE -->
-    <div class="sidebar">
+<!-- LEFT SIDE -->
+<div class="sidebar">
 
-        <h3>Customer Details</h3>
+<h3>Customer Details</h3>
 
-        <input id="name" placeholder="Full Name">
-        <input id="email" placeholder="Email">
-        <input id="phone" placeholder="Phone">
-        <input id="license" placeholder="License Number">
+<input id="name" placeholder="Full Name">
+<input id="email" placeholder="Email">
+<input id="phone" placeholder="Phone">
+<input id="license" placeholder="License Number">
 
-        <button onclick="createCustomer()">Continue</button>
-        <p id="customerMsg" class="msg"></p>
+<button onclick="createCustomer()">Continue</button>
+<p id="customerMsg" class="msg"></p>
 
-        <hr>
+<hr>
 
-        <h3>Booking</h3>
+<h3>Booking</h3>
 
-        <div style="background:#e0ecff;padding:10px;border-radius:8px;margin-bottom:10px;">
-            <b>Selected Car ID:</b> <span id="selectedCar">None</span>
-        </div>
+<p><b>Selected Car ID:</b> <span id="selectedCar">None</span></p>
 
-        <input type="date" id="start">
-        <input type="date" id="end">
+<input type="date" id="start">
+<input type="date" id="end">
 
-        <button onclick="calculatePrice()">Calculate Price</button>
-        <p id="price" class="msg"></p>
+<button onclick="calculatePrice()">Calculate Price</button>
+<p id="price" class="msg"></p>
 
-        <button onclick="book()" id="bookBtn" disabled>
-            🚗 Book Now
-        </button>
+<button onclick="book()">🚗 Book Now</button>
+<p id="bookingMsg" class="msg"></p>
 
-        <p id="bookingMsg" class="msg"></p>
+</div>
 
-    </div>
-
-    <!-- RIGHT SIDE -->
-    <div class="main">
-
-        <div class="card">
-            <h2>Available Cars (Click "Select This Car")</h2>
-        </div>
-
-        <div class="cars" id="cars"></div>
-
-    </div>
+<!-- RIGHT SIDE -->
+<div class="main">
+<h2>Available Cars</h2>
+<div class="cars" id="cars"></div>
+</div>
 
 </div>
 
 <script>
 
-let currentCustomerId = null;
+// GLOBAL STATE
+let currentCustomerId = localStorage.getItem("customerId") || null;
 let selectedCarId = null;
 let selectedPrice = 0;
 
-// AUTO LOAD CARS
+// LOAD CARS
 window.onload = loadCars;
+
+function loadCars() {
+    fetch("http://localhost:5000/cars")
+    .then(res => res.json())
+    .then(data => {
+        const container = document.getElementById("cars");
+        container.innerHTML = "";
+
+        data.forEach(car => {
+            container.innerHTML += `
+                <div class="card car" id="car-${car.car_id}">
+                    <h3>${car.brand} ${car.model}</h3>
+                    <p>ID: ${car.car_id}</p>
+                    <p>₹${car.price_per_day}/day</p>
+                    <button onclick="selectCar(${car.car_id}, ${car.price_per_day})">
+                        Select
+                    </button>
+                </div>
+            `;
+        });
+    });
+}
 
 // CREATE CUSTOMER
 function createCustomer() {
-    const nameInput = document.getElementById("name").value;
-    const emailInput = document.getElementById("email").value;
-    const phoneInput = document.getElementById("phone").value;
-    const licenseInput = document.getElementById("license").value;
+    const name = document.getElementById("name").value;
+    const email = document.getElementById("email").value;
+    const phone = document.getElementById("phone").value;
+    const license = document.getElementById("license").value;
 
-    if (!nameInput || !emailInput || !phoneInput || !licenseInput) {
+    if (!name || !email || !phone || !license) {
         document.getElementById("customerMsg").innerText = "Fill all fields ❌";
         return;
     }
@@ -195,41 +178,27 @@ function createCustomer() {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
-            name: nameInput,
-            email: emailInput,
-            phone: phoneInput,
-            license_number: licenseInput
+            name,
+            email,
+            phone,
+            license_number: license
         })
     })
     .then(res => res.json())
-    .then(res => {
-        currentCustomerId = res.customer_id;
-        document.getElementById("customerMsg").innerText = "Customer created ✅ Now book car";
-    })
-    .catch(() => {
-        document.getElementById("customerMsg").innerText = "Error creating customer ❌";
-    });
-}
-
-// LOAD CARS
-function loadCars() {
-    fetch("http://localhost:5000/cars")
-    .then(res => res.json())
     .then(data => {
-        cars.innerHTML = "";
+        console.log("Customer Response:", data);
 
-        data.forEach(car => {
-            cars.innerHTML += `
-                <div class="card car" id="car-${car.car_id}">
-                    <h3>${car.brand} ${car.model}</h3>
-                    <p>ID: ${car.car_id}</p>
-                    <p class="price">₹${car.price_per_day}/day</p>
-                    <button onclick="selectCar(${car.car_id}, ${car.price_per_day})">
-                        🚗 Select This Car
-                    </button>
-                </div>
-            `;
-        });
+        if (!data.customer_id) {
+            document.getElementById("customerMsg").innerText =
+                "Error creating customer ❌";
+            return;
+        }
+
+        currentCustomerId = data.customer_id;
+        localStorage.setItem("customerId", currentCustomerId);
+
+        document.getElementById("customerMsg").innerText =
+            "Customer created ✅ ID: " + currentCustomerId;
     });
 }
 
@@ -238,46 +207,57 @@ function selectCar(id, price) {
     selectedCarId = id;
     selectedPrice = price;
 
-    selectedCar.innerText = id;
+    document.getElementById("selectedCar").innerText = id;
 
     document.querySelectorAll(".car").forEach(c => c.classList.remove("selected"));
     document.getElementById("car-" + id).classList.add("selected");
-
-    bookBtn.disabled = false;
-
-    price.innerText = "Car selected ✅ Now choose dates";
 }
 
 // CALCULATE PRICE
 function calculatePrice() {
     if (!selectedCarId) {
-        price.innerText = "Select a car first ❌";
+        document.getElementById("price").innerText = "Select car first ❌";
         return;
     }
 
-    const s = new Date(start.value);
-    const e = new Date(end.value);
+    const start = new Date(document.getElementById("start").value);
+    const end = new Date(document.getElementById("end").value);
 
-    const days = (e - s) / (1000 * 60 * 60 * 24);
+    const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
 
     if (days <= 0) {
-        price.innerText = "Invalid dates ❌";
+        document.getElementById("price").innerText = "Invalid dates ❌";
         return;
     }
 
     const total = days * selectedPrice;
-    price.innerText = `Total: ₹${total} (${days} days)`;
+
+    document.getElementById("price").innerText =
+        `Total: ₹${total} (${days} days)`;
 }
 
 // BOOK CAR
 function book() {
+    console.log("Customer ID:", currentCustomerId);
+
     if (!currentCustomerId) {
-        bookingMsg.innerText = "Enter customer details first ❌";
+        document.getElementById("bookingMsg").innerText =
+            "Customer not created ❌";
         return;
     }
 
-    if (!start.value || !end.value) {
-        bookingMsg.innerText = "Select dates ❌";
+    if (!selectedCarId) {
+        document.getElementById("bookingMsg").innerText =
+            "Select a car ❌";
+        return;
+    }
+
+    const start = document.getElementById("start").value;
+    const end = document.getElementById("end").value;
+
+    if (!start || !end) {
+        document.getElementById("bookingMsg").innerText =
+            "Select dates ❌";
         return;
     }
 
@@ -287,16 +267,20 @@ function book() {
         body: JSON.stringify({
             customer_id: currentCustomerId,
             car_id: selectedCarId,
-            start_date: start.value,
-            end_date: end.value
+            start_date: start,
+            end_date: end
         })
     })
     .then(res => res.text())
     .then(msg => {
-        bookingMsg.innerText = msg;
+        document.getElementById("bookingMsg").innerText = msg;
+
+        // RESET UI
+        selectedCarId = null;
+        document.getElementById("selectedCar").innerText = "None";
+        document.getElementById("price").innerText = "";
+
         loadCars();
-        bookBtn.disabled = true;
-        selectedCar.innerText = "None";
     });
 }
 
