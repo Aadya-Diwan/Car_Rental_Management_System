@@ -1,27 +1,19 @@
-require("dotenv").config();
-
 const express = require("express");
 const mysql = require("mysql2");
 const cors = require("cors");
-const path = require("path");
 
 const app = express();
-
-// ======================
-// MIDDLEWARE
-// ======================
 app.use(cors());
 app.use(express.json());
-app.use(express.static(__dirname)); // serve index.html
 
 // ======================
 // DB CONNECTION
 // ======================
 const db = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME
+    host: "localhost",
+    user: "root",
+    password: "root",
+    database: "car_rental_management_system"
 });
 
 db.connect(err => {
@@ -30,6 +22,10 @@ db.connect(err => {
         return;
     }
     console.log("✅ MySQL Connected");
+});
+
+app.get("/", (req, res) => {
+    res.send("Backend working ✅");
 });
 
 // ======================
@@ -45,15 +41,18 @@ app.post("/customers", (req, res) => {
     }
 
     const sql = `
-        INSERT INTO Customers (name, email, phone, license_number)
+        INSERT INTO customers (name, email, phone, license_number)
         VALUES (?, ?, ?, ?)
     `;
 
     db.query(sql, [name, email, phone, license_number], (err, result) => {
+
         if (err) {
             console.error("❌ DB ERROR:", err);
             return res.status(500).json({ error: "Database error ❌" });
         }
+
+        console.log("✅ Insert Result:", result);
 
         res.json({
             success: true,
@@ -62,11 +61,12 @@ app.post("/customers", (req, res) => {
     });
 });
 
+
 // ======================
 // GET AVAILABLE CARS
 // ======================
 app.get("/cars", (req, res) => {
-    const sql = "SELECT * FROM Cars WHERE status='available'";
+    const sql = "Select * from cars where status='available'";
 
     db.query(sql, (err, result) => {
         if (err) {
@@ -77,8 +77,9 @@ app.get("/cars", (req, res) => {
     });
 });
 
+
 // ======================
-// BOOK CAR
+// BOOK CAR (RENTAL + PAYMENT)
 // ======================
 app.post("/rentals", (req, res) => {
     const { customer_id, car_id, start_date, end_date } = req.body;
@@ -91,16 +92,19 @@ app.post("/rentals", (req, res) => {
 
     const start = new Date(start_date);
     const end = new Date(end_date);
+
     const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
 
     if (days <= 0) {
         return res.status(400).send("Invalid dates ❌");
     }
 
+    // GET PRICE
     db.query(
-        "SELECT price_per_day FROM Cars WHERE car_id=? AND status='available'",
+        "SELECT price_per_day FROM cars WHERE car_id=? AND status='available'",
         [car_id],
         (err, result) => {
+
             if (err) {
                 console.error("❌ Price Fetch Error:", err);
                 return res.status(500).send(err);
@@ -113,8 +117,11 @@ app.post("/rentals", (req, res) => {
             const price = result[0].price_per_day;
             const total = price * days;
 
+            console.log("💰 Total:", total);
+
+            // INSERT RENTAL
             db.query(
-                `INSERT INTO Rentals 
+                `INSERT INTO rentals 
                 (customer_id, car_id, start_date, end_date, total_amount, status)
                 VALUES (?, ?, ?, ?, ?, 'ongoing')`,
                 [customer_id, car_id, start_date, end_date, total],
@@ -127,11 +134,13 @@ app.post("/rentals", (req, res) => {
 
                     const rentalId = rentalResult.insertId;
 
+                    // UPDATE CAR STATUS
                     db.query(
-                        "UPDATE Cars SET status='rented' WHERE car_id=?",
+                        "UPDATE cars SET status='rented' WHERE car_id=?",
                         [car_id]
                     );
 
+                    // INSERT PAYMENT
                     db.query(
                         "INSERT INTO Payments (rental_id, amount, status) VALUES (?, ?, 'paid')",
                         [rentalId, total]
@@ -143,6 +152,7 @@ app.post("/rentals", (req, res) => {
         }
     );
 });
+
 
 // ======================
 // RETURN CAR
@@ -160,11 +170,13 @@ app.put("/return/:id", (req, res) => {
 
             const carId = result[0].car_id;
 
+            // COMPLETE RENTAL
             db.query(
                 "UPDATE Rentals SET status='completed' WHERE rental_id=?",
                 [rentalId]
             );
 
+            // MAKE CAR AVAILABLE AGAIN
             db.query(
                 "UPDATE Cars SET status='available' WHERE car_id=?",
                 [carId]
@@ -175,18 +187,10 @@ app.put("/return/:id", (req, res) => {
     );
 });
 
-// ======================
-// DEFAULT ROUTE
-// ======================
-app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "index.html"));
-});
 
 // ======================
 // SERVER START
 // ======================
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+app.listen(5000, () => {
+    console.log("🚀 Server running on http://localhost:5000");
 });
